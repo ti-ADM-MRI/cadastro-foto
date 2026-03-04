@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Cadastro com Foto</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding: 20px;
+    }
+    video, canvas {
+      display: block;
+      margin: 10px auto;
+    }
+  </style>
+</head>
+<body>
+  <h2>Cadastro com Foto</h2>
+
+  <input type="file" id="planilha" accept=".xlsx"><br><br>
+
+  <label for="nome">Nome:</label>
+  <input type="text" id="nome" list="sugestoes" placeholder="Digite seu nome">
+  <datalist id="sugestoes"></datalist>
+  <button onclick="buscarNome()">Buscar na planilha</button><br><br>
+
+  <div id="resultado"></div><br>
+
+  <button id="abrirCamera">📷 Abrir Câmera</button><br><br>
+
+  <video id="video" autoplay playsinline width="320" height="240" style="display:none;"></video>
+  <canvas id="img-cad" width="320" height="240" style="display:none;"></canvas><br>
+  
+  <button id="baixar" style="display:none;">📥 Baixar Imagem</button>
+  <button id="enviar" style="display:none;">📤 Enviar para servidor</button>
+  
+  <button id="capturar" style="display:none;">Salvar Foto</button>
+
+  <script>
+    let dadosPlanilha = [];
+
+    document.getElementById('planilha').addEventListener('change', function(e) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheet = workbook.Sheets['cadastro'];
+        if (!sheet) {
+          alert("A aba 'cadastro' não foi encontrada.");
+          return;
+        }
+        dadosPlanilha = XLSX.utils.sheet_to_json(sheet);
+
+		const nomes = dadosPlanilha.map(p => p.Nome || "").filter(n => n);
+
+		document.getElementById('nome').addEventListener('input', function() {
+		  const entrada = this.value.toLowerCase();
+		  const sugestoes = nomes.filter(n => n.toLowerCase().includes(entrada));
+		  const datalist = document.getElementById('sugestoes');
+		  datalist.innerHTML = '';
+		  sugestoes.forEach(nome => {
+			const option = document.createElement('option');
+			option.value = nome;
+			datalist.appendChild(option);
+		  });
+		});
+
+        alert("Planilha carregada com sucesso!");
+      };
+      reader.readAsArrayBuffer(e.target.files[0]);
+    });
+
+    function buscarNome() {
+      const nome = document.getElementById('nome').value.trim().toLowerCase();
+      const resultado = dadosPlanilha.find(p => (p.Nome || "").toLowerCase() === nome);
+      const div = document.getElementById('resultado');
+      if (resultado) {
+        div.innerHTML = `<strong>Encontrado:</strong> ${JSON.stringify(resultado)}`;
+      } else {
+        div.innerHTML = `<strong>Nome não encontrado na planilha.</strong>`;
+      }
+    }
+
+    const abrirCameraBtn = document.getElementById('abrirCamera');
+    const capturarBtn = document.getElementById('capturar');
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('img-cad');
+    const context = canvas.getContext('2d');
+    let stream;
+
+    abrirCameraBtn.onclick = async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "user" },
+          audio: false
+        });
+        video.srcObject = stream;
+        video.style.display = 'block';
+        capturarBtn.style.display = 'inline-block';
+      } catch (err) {
+        alert("Erro ao acessar a câmera: " + err.message);
+      }
+    };
+
+    capturarBtn.onclick = () => {
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      canvas.style.display = 'block';
+      video.style.display = 'none';
+      capturarBtn.style.display = 'none';
+      stream.getTracks().forEach(track => track.stop());
+    };
+
+	const baixarBtn = document.getElementById('baixar');
+
+	capturarBtn.onclick = () => {
+	  //Desenha a imagem da câmera no canvas
+	  context.drawImage(video, 0, 0, canvas.width, canvas.height);
+	  
+	  //Pega o nome digitado
+      const nome = document.getElementById('nome').value.trim();
+
+	  //Estiliza e escreve o nome sobre a imagem
+	  context.font = "20px Arial";
+	  context.fillStyle = "white";
+	  context.strokeStyle = "black";
+	  context.lineWidth = 2;
+	  context.textAlign = "center";
+	  const x = canvas.width / 2;
+	  const y = canvas.height - 20;
+	  context.strokeText(nome, x, y); // contorno preto
+	  context.fillText(nome, x, y);   // preenchimento branco
+	  
+	  //Exibe o canvas e botão de download
+	  canvas.style.display = 'block';
+	  video.style.display = 'none';
+	  capturarBtn.style.display = 'none';
+	  baixarBtn.style.display = 'inline-block';
+	  
+	  //Encerra a câmera
+	  stream.getTracks().forEach(track => track.stop());
+	};
+
+	baixarBtn.onclick = () => {
+	  const nome = document.getElementById('nome').value.trim().toLowerCase().replace(/\s+/g, '-');
+	  const nomeArquivo = nome ? `${nome}.png` : 'img-cad.png';
+	  const link = document.createElement('a');
+	  link.download = nomeArquivo;
+	  link.href = canvas.toDataURL('image/png');
+	  link.click();
+	};
+		
+	const enviarBtn = document.getElementById('enviar');
+
+	capturarBtn.onclick = () => {
+	  context.drawImage(video, 0, 0, canvas.width, canvas.height);
+	  const nome = document.getElementById('nome').value.trim();
+	  context.font = "20px Arial";
+	  context.fillStyle = "white";
+	  context.strokeStyle = "black";
+	  context.lineWidth = 2;
+	  context.textAlign = "center";
+	  context.strokeText(nome, canvas.width / 2, canvas.height - 20);
+	  context.fillText(nome, canvas.width / 2, canvas.height - 20);
+
+	  canvas.style.display = 'block';
+	  video.style.display = 'none';
+	  capturarBtn.style.display = 'none';
+	  baixarBtn.style.display = 'inline-block';
+	  enviarBtn.style.display = 'inline-block';
+	  stream.getTracks().forEach(track => track.stop());
+	};
+
+	enviarBtn.onclick = () => {
+	  const nome = document.getElementById('nome').value.trim();
+	  const imagemBase64 = canvas.toDataURL('image/png');
+	  fetch('/salvar-imagem', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ imagemBase64, nome })
+	  })
+	  .then(res => res.text())
+	  .then(msg => alert(msg))
+	  .catch(err => alert('Erro: ' + err));
+	};
+  </script>
+</body>
+</html>
